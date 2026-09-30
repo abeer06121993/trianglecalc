@@ -41,6 +41,7 @@ export function EducationalContent() {
         </ul>
       </section>
 
+      <div id="formulas" className="space-y-12">
       {/* Pythagorean theorem */}
       <section aria-labelledby="pythagoras-heading">
         <h2 id="pythagoras-heading" className="text-2xl font-bold text-slate-900 mb-4">
@@ -76,6 +77,7 @@ export function EducationalContent() {
         </div>
         <p className="text-slate-600 leading-relaxed">{t.cosineRuleNote}</p>
       </section>
+      </div>
 
       {/* How to solve a triangle yourself */}
       <section aria-labelledby="solve-yourself-heading">
@@ -129,7 +131,7 @@ function FaqSection() {
   const t = getTranslation();
 
   return (
-    <section aria-labelledby="faq-heading">
+    <section id="faq" aria-labelledby="faq-heading">
       <h2 id="faq-heading" className="text-2xl font-bold text-slate-900 mb-6">
         {t.faqTitle}
       </h2>
@@ -161,11 +163,9 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
           aria-hidden="true"
         />
       </button>
-      {open && (
-        <div id={contentId} className="px-4 pb-4">
-          <p className="text-slate-600 leading-relaxed">{answer}</p>
-        </div>
-      )}
+      <div id={contentId} className="px-4 pb-4" hidden={!open}>
+        <p className="text-slate-600 leading-relaxed">{answer}</p>
+      </div>
     </div>
   );
 }

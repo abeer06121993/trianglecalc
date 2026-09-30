@@ -6,6 +6,7 @@ export type HighlightKey = 'a' | 'b' | 'c' | 'alpha' | 'beta' | 'gamma' | null;
 
 interface Props {
   solution: TriangleSolution | null;
+  solutions?: readonly TriangleSolution[];
   unit: Unit;
   hasValues: boolean;
   highlight: HighlightKey;
@@ -42,7 +43,30 @@ function vertexLabelPos(
   };
 }
 
-export default function TriangleDiagram({ solution, unit, hasValues, highlight, knownKeys }: Props) {
+export default function TriangleDiagram({ solution, solutions, unit, hasValues, highlight, knownKeys }: Props) {
+  if (solutions?.length === 2) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {solutions.map((item, index) => (
+          <section key={`${item.a}-${item.b}-${item.c}-${index}`} className="min-w-0 rounded-xl border border-slate-200 bg-white/70 p-2 sm:p-3">
+            <h3 className="px-2 pt-1 text-sm font-semibold text-slate-700">Solution {index + 1}</h3>
+            <TriangleDrawing
+              solution={item}
+              unit={unit}
+              hasValues={hasValues}
+              highlight={highlight}
+              knownKeys={knownKeys}
+            />
+          </section>
+        ))}
+      </div>
+    );
+  }
+
+  return <TriangleDrawing solution={solution} unit={unit} hasValues={hasValues} highlight={highlight} knownKeys={knownKeys} />;
+}
+
+function TriangleDrawing({ solution, unit, hasValues, highlight, knownKeys }: Omit<Props, 'solutions'>) {
   const computed = useMemo(() => {
     if (!solution) return null;
 
@@ -69,7 +93,7 @@ export default function TriangleDiagram({ solution, unit, hasValues, highlight, 
     const w = maxX - minX;
     const h = maxY - minY;
 
-    return { points, centroid, minX, maxX, minY, maxY, w, h };
+    return { points, centroid, minX, minY, w, h };
   }, [solution]);
 
   if (!solution || !computed) {
@@ -96,7 +120,7 @@ export default function TriangleDiagram({ solution, unit, hasValues, highlight, 
     );
   }
 
-  const { points, centroid, minX, maxX, minY, maxY, w, h } = computed;
+  const { points, centroid, minX, minY, w, h } = computed;
 
   // Keep the SVG in a fixed coordinate system so labels do not scale with
   // the triangle's real-world dimensions. This prevents tiny triangles such
@@ -133,7 +157,7 @@ export default function TriangleDiagram({ solution, unit, hasValues, highlight, 
   const angleArc = (vertex: { x: number; y: number }, p1: { x: number; y: number }, p2: { x: number; y: number }, radius: number) => {
     const a1 = Math.atan2(p1.y - vertex.y, p1.x - vertex.x);
     const a2 = Math.atan2(p2.y - vertex.y, p2.x - vertex.x);
-    let start = a1;
+    const start = a1;
     let delta = a2 - start;
     if (delta > Math.PI) delta -= 2 * Math.PI;
     if (delta < -Math.PI) delta += 2 * Math.PI;

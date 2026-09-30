@@ -27,6 +27,7 @@ export type SolutionStatus =
   | { kind: 'solved'; solution: TriangleSolution }
   | { kind: 'multiple'; solutions: [TriangleSolution, TriangleSolution] }
   | { kind: 'insufficient'; message: string }
+  | { kind: 'contradictory'; message: string }
   | { kind: 'invalid'; message: string };
 
 export type SolveMethod =
@@ -47,6 +48,15 @@ export interface SolveResult {
 
 const toRad = (deg: number): number => (deg * Math.PI) / 180;
 const toDeg = (rad: number): number => (rad * 180) / Math.PI;
+
+// The solver squares side lengths in the cosine rule. This range keeps those
+// operations far from IEEE-754 overflow/underflow; the relative limit avoids
+// losing the smaller squared side below floating-point precision.
+export const MIN_SUPPORTED_SIDE_CM = 1e-150;
+export const MAX_SUPPORTED_SIDE_CM = 1e150;
+const MIN_SIDE_TO_MAX_SIDE_RATIO = Math.sqrt(Number.EPSILON);
+const NUMERIC_RANGE_ERROR =
+  'Side lengths are outside the supported numerical range (1e-150 to 1e150 cm) or differ too much in scale for reliable calculation.';
 
 function angleFromCosine(sides: { a: number; b: number; c: number }, opposite: 'a' | 'b' | 'c'): number {
   const { a, b, c } = sides;
@@ -82,13 +92,52 @@ function triangleInequality(a: number, b: number, c: number): boolean {
   return a + b > c && a + c > b && b + c > a;
 }
 
+export function sideLengthsNumericallySafe(sides: number[]): boolean {
+  if (sides.some((side) => !Number.isFinite(side) || side < MIN_SUPPORTED_SIDE_CM || side > MAX_SUPPORTED_SIDE_CM)) {
+    return false;
+  }
+  const smallest = Math.min(...sides);
+  const largest = Math.max(...sides);
+  return smallest >= largest * MIN_SIDE_TO_MAX_SIDE_RATIO;
+}
+
+function solutionNumericallySafe(solution: TriangleSolution): boolean {
+  const sides = [solution.a, solution.b, solution.c];
+  const angles = [solution.alpha, solution.beta, solution.gamma];
+  return sideLengthsNumericallySafe(sides)
+    && angles.every((angle) => Number.isFinite(angle) && angle > 0 && angle < 180);
+}
+
+function solutionGeometryValid(solution: TriangleSolution): boolean {
+  return solutionNumericallySafe(solution)
+    && triangleInequality(solution.a, solution.b, solution.c)
+    && anglesSumValid(solution.alpha, solution.beta, solution.gamma);
+}
+
 function anglesSumValid(a1: number, a2: number, a3: number): boolean {
   return Math.abs(a1 + a2 + a3 - 180) < 1e-6;
 }
 
+const ANGLE_CONSISTENCY_TOLERANCE_DEGREES = 0.1;
+
 // --- Main solve function ---
 
 export function solveTriangle(input: TriangleInput): SolveResult {
+  // Reject non-finite values explicitly; they are invalid inputs, not missing values.
+  for (const value of Object.values(input)) {
+    if (value !== null && !Number.isFinite(value)) {
+      return invalidResult('All entered values must be finite numbers.');
+    }
+  }
+
+  const providedSides = [input.a, input.b, input.c].filter((value): value is number => value !== null);
+  if (providedSides.some((side) => side <= 0)) {
+    return invalidResult('Side lengths must be greater than zero.');
+  }
+  if (!sideLengthsNumericallySafe(providedSides)) {
+    return invalidResult(NUMERIC_RANGE_ERROR);
+  }
+
   const a = isPositiveSide(input.a) ? input.a! : null;
   const b = isPositiveSide(input.b) ? input.b! : null;
   const c = isPositiveSide(input.c) ? input.c! : null;
@@ -118,6 +167,32 @@ export function solveTriangle(input: TriangleInput): SolveResult {
     return invalidResult('Angles must be between 0° and 180°.');
   }
 
+  // Three sides fully determine feasibility and shape, regardless of extra angles.
+  if (a !== null && b !== null && c !== null) {
+    if (!triangleInequality(a, b, c)) {
+      return invalidResult('The three side lengths cannot form a triangle. The sum of any two sides must be greater than the third side.');
+    }
+
+    const sideDetermined: TriangleSolution = {
+      a, b, c,
+      alpha: angleFromCosine({ a, b, c }, 'a'),
+      beta: angleFromCosine({ a, b, c }, 'b'),
+      gamma: angleFromCosine({ a, b, c }, 'c'),
+    };
+    const providedAngles = [
+      { name: 'alpha', provided: alpha, calculated: sideDetermined.alpha },
+      { name: 'beta', provided: beta, calculated: sideDetermined.beta },
+      { name: 'gamma', provided: gamma, calculated: sideDetermined.gamma },
+    ];
+    const conflict = providedAngles.find(({ provided, calculated }) =>
+      provided !== null && Math.abs(provided - calculated) > ANGLE_CONSISTENCY_TOLERANCE_DEGREES,
+    );
+    if (conflict) {
+      return contradictoryResult(`The entered ${conflict.name} conflicts with the angle determined by the three side lengths.`);
+    }
+    return solvedResult(sideDetermined, 'SSS');
+  }
+
   const sideCount = [a, b, c].filter((s) => s !== null).length;
   const angleCount = [alpha, beta, gamma].filter((an) => an !== null).length;
   const known = sideCount + angleCount;
@@ -139,16 +214,6 @@ export function solveTriangle(input: TriangleInput): SolveResult {
   }
 
   // --- SSS: Three sides ---
-  if (sideCount === 3 && angleCount === 0) {
-    if (!triangleInequality(a!, b!, c!)) {
-      return invalidResult('These side lengths violate the triangle inequality and cannot form a valid triangle.');
-    }
-    const al = angleFromCosine({ a: a!, b: b!, c: c! }, 'a');
-    const be = angleFromCosine({ a: a!, b: b!, c: c! }, 'b');
-    const ga = angleFromCosine({ a: a!, b: b!, c: c! }, 'c');
-    return solvedResult({ a: a!, b: b!, c: c!, alpha: al, beta: be, gamma: ga }, 'SSS');
-  }
-
   // --- SAS: Two sides + included angle ---
   // a, b, γ included
   if (a && b && gamma && !alpha && !beta && !c) {
@@ -345,6 +410,10 @@ function solveSSAPair(
   const sol1 = buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle1, thirdAngle1);
   const sol2 = buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle2, thirdAngle2);
 
+  if (!solutionGeometryValid(sol1) || !solutionGeometryValid(sol2)) {
+    return invalidResult(NUMERIC_RANGE_ERROR);
+  }
+
   return {
     status: { kind: 'multiple', solutions: [sol1, sol2] },
     method: 'SSA',
@@ -400,6 +469,9 @@ function buildSolution(
 
 function solvedResult(sol: TriangleSolution, method: SolveMethod): SolveResult {
   // Final validation
+  if (!solutionNumericallySafe(sol)) {
+    return invalidResult(NUMERIC_RANGE_ERROR);
+  }
   if (!triangleInequality(sol.a, sol.b, sol.c)) {
     return invalidResult('The calculated values do not satisfy the triangle inequality.');
   }
@@ -411,6 +483,10 @@ function solvedResult(sol: TriangleSolution, method: SolveMethod): SolveResult {
 
 function insufficientResult(message: string): SolveResult {
   return { status: { kind: 'insufficient', message }, method: null };
+}
+
+function contradictoryResult(message: string): SolveResult {
+  return { status: { kind: 'contradictory', message }, method: null };
 }
 
 function invalidResult(message: string): SolveResult {
@@ -428,7 +504,13 @@ export function convertLength(value: number, from: Unit, to: Unit): number {
 // --- Formatting ---
 
 export function formatLength(value: number, unit: Unit, decimals = 2): string {
-  return `${value.toFixed(decimals)} ${unit}`;
+  return `${formatLengthValue(value, unit, decimals)} ${unit}`;
+}
+
+/** Formats a canonical centimeter value for an editable field in the selected unit. */
+export function formatLengthValue(valueCm: number | null, unit: Unit, decimals = 2): string {
+  if (valueCm === null) return '';
+  return convertLength(valueCm, 'cm', unit).toFixed(decimals);
 }
 
 export function formatAngle(value: number, decimals = 2): string {

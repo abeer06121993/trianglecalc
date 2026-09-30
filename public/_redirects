@@ -1,1 +1,8 @@
+# Keep the calculator's canonical URL at the homepage.
 /triangle-calculator / 301
+
+# Vite emits privacy.html, imprint.html and contact.html; Pages serves these at extensionless URLs.
+# Normalize trailing slash variants to the existing canonical paths.
+/privacy/ /privacy 301
+/imprint/ /imprint 301
+/contact/ /contact 301

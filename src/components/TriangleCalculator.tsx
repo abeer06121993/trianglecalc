@@ -1,10 +1,13 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { RotateCcw, Calculator as CalcIcon } from 'lucide-react';
 import {
   solveTriangle,
   classifyTriangle,
   formatLength,
+  formatLengthValue,
   formatAngle,
+  convertLength,
+  sideLengthsNumericallySafe,
   type TriangleInput,
   type Unit,
   type SolveResult,
@@ -12,6 +15,7 @@ import {
   type SolveMethod,
 } from '@/lib/triangle';
 import { getTranslation } from '@/lib/i18n';
+import { getDiagramSolutions } from '@/lib/triangleDiagram';
 import TriangleDiagram, { type HighlightKey } from './TriangleDiagram';
 
 type FieldKey = 'a' | 'b' | 'c' | 'alpha' | 'beta' | 'gamma';
@@ -31,7 +35,12 @@ export default function TriangleCalculator() {
   // Live preview — always compute whenever inputs change
   const liveResult = useMemo(() => {
     const knownCount = Object.values(inputs).filter((v) => v !== null && v > 0).length;
-    if (knownCount < 3) return null;
+    const sideValues = [inputs.a, inputs.b, inputs.c].filter((value): value is number => value !== null);
+    const hasInvalidInput = !sideLengthsNumericallySafe(sideValues)
+      || [inputs.alpha, inputs.beta, inputs.gamma].some((value) =>
+        value !== null && (!Number.isFinite(value) || value <= 0 || value >= 180),
+      );
+    if (knownCount < 3 && !hasInvalidInput) return null;
     return solveTriangle(inputs);
   }, [inputs]);
 
@@ -51,13 +60,13 @@ export default function TriangleCalculator() {
     [rawInputs],
   );
 
-  // The solution for the diagram (from live result)
+  // Keep every valid solution for the diagram; the result fields use the first.
+  const diagramSolutions = useMemo(() => getDiagramSolutions(liveResult), [liveResult]);
+
+  // The first solution feeds the calculated-value indicators.
   const diagramSolution = useMemo<TriangleSolution | null>(() => {
-    if (!liveResult) return null;
-    if (liveResult.status.kind === 'solved') return liveResult.status.solution;
-    if (liveResult.status.kind === 'multiple') return liveResult.status.solutions[0];
-    return null;
-  }, [liveResult]);
+    return diagramSolutions[0] ?? null;
+  }, [diagramSolutions]);
 
   // Merge known values with calculated solution for display
   const displayValues = useMemo(() => {
@@ -76,11 +85,36 @@ export default function TriangleCalculator() {
 
   const handleInputChange = useCallback((key: string, value: string) => {
     setRawInputs((prev) => ({ ...prev, [key]: value }));
+    const parsed = value === '' ? null : parseFloat(value);
+    const storedValue = parsed !== null && ['a', 'b', 'c'].includes(key)
+      ? convertLength(parsed, unit, 'cm')
+      : parsed;
     setInputs((prev) => ({
       ...prev,
-      [key]: value === '' ? null : parseFloat(value),
+      [key]: storedValue,
     }));
-  }, []);
+  }, [unit]);
+
+  const handleUnitChange = useCallback((nextUnit: Unit) => {
+    if (nextUnit === unit) return;
+
+    setRawInputs((prev) => {
+      const next = { ...prev };
+      const enteredSides = [inputs.a, inputs.b, inputs.c].filter((value): value is number => value !== null);
+      const sideValuesSupported = sideLengthsNumericallySafe(enteredSides);
+      (['a', 'b', 'c'] as const).forEach((key) => {
+        if (prev[key] === '') return;
+        const canonicalCm = inputs[key];
+        // Preserve invalid in-progress text so the solver can report it as invalid.
+        if (canonicalCm === null || !Number.isFinite(canonicalCm)) return;
+        next[key] = sideValuesSupported
+          ? formatLengthValue(canonicalCm, nextUnit)
+          : String(convertLength(canonicalCm, 'cm', nextUnit));
+      });
+      return next;
+    });
+    setUnit(nextUnit);
+  }, [inputs, unit]);
 
   const handleReset = useCallback(() => {
     setInputs({ a: null, b: null, c: null, alpha: null, beta: null, gamma: null });
@@ -99,7 +133,7 @@ export default function TriangleCalculator() {
         <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="group" aria-label={t.unitLabel}>
           <button
             type="button"
-            onClick={() => setUnit('cm')}
+            onClick={() => handleUnitChange('cm')}
             className={`px-3.5 py-1.5 text-sm font-medium rounded-md transition-all ${
               unit === 'cm' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
@@ -109,7 +143,7 @@ export default function TriangleCalculator() {
           </button>
           <button
             type="button"
-            onClick={() => setUnit('inch')}
+            onClick={() => handleUnitChange('inch')}
             className={`px-3.5 py-1.5 text-sm font-medium rounded-md transition-all ${
               unit === 'inch' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
             }`}
@@ -213,6 +247,7 @@ export default function TriangleCalculator() {
           {/* Triangle visualization */}
           <TriangleDiagram
             solution={diagramSolution}
+            solutions={liveResult?.status.kind === 'multiple' ? diagramSolutions : undefined}
             unit={unit}
             hasValues={hasAnyValue}
             highlight={highlight}
@@ -220,7 +255,12 @@ export default function TriangleCalculator() {
           />
 
           {/* Live feedback bar */}
-          <div className="mt-3">
+            <div
+              className="mt-3"
+              role={liveResult?.status.kind === 'invalid' || liveResult?.status.kind === 'contradictory' ? 'alert' : 'status'}
+              aria-live={liveResult?.status.kind === 'invalid' || liveResult?.status.kind === 'contradictory' ? 'assertive' : 'polite'}
+              aria-atomic="true"
+            >
             <LiveFeedback
               knownCount={knownCount}
               result={liveResult}
@@ -354,6 +394,15 @@ function LiveFeedback({
   result: SolveResult | null;
   hasAnyValue: boolean;
 }) {
+  if (result?.status.kind === 'invalid' || result?.status.kind === 'contradictory') {
+    return (
+      <div className="flex items-center justify-center gap-2 text-xs text-red-500">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500" aria-hidden="true" />
+        <span>{result.status.message}</span>
+      </div>
+    );
+  }
+
   if (!hasAnyValue) {
     return (
       <p className="text-center text-xs text-slate-400">
@@ -390,15 +439,6 @@ function LiveFeedback({
       <div className="flex items-center justify-center gap-2 text-xs text-amber-600">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
         <span>Two solutions possible — see both below</span>
-      </div>
-    );
-  }
-
-  if (result.status.kind === 'invalid') {
-    return (
-      <div className="flex items-center justify-center gap-2 text-xs text-red-500">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-        <span>{result.status.message}</span>
       </div>
     );
   }

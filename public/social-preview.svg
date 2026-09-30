@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Triangle Calculator</title>
+  <desc id="description">Calculate missing sides and angles with a clear triangle illustration.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc" />
+      <stop offset="1" stop-color="#eff6ff" />
+    </linearGradient>
+    <linearGradient id="triangle" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6" />
+      <stop offset="1" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="28" fill="url(#background)" />
+  <circle cx="1010" cy="96" r="180" fill="#dbeafe" opacity=".65" />
+  <circle cx="1140" cy="570" r="210" fill="#e0e7ff" opacity=".7" />
+  <g font-family="Inter, Arial, sans-serif" fill="#0f172a">
+    <path d="M90 96 116 141H64Z" fill="#2563eb" />
+    <text x="140" y="137" font-size="28" font-weight="700" letter-spacing=".5">TRIANGLECALC</text>
+    <text x="86" y="286" font-size="52" font-weight="700" letter-spacing="-1">Triangle Calculator</text>
+    <text x="90" y="350" font-size="32" fill="#475569">Calculate missing sides and angles</text>
+    <text x="90" y="470" font-size="34" font-weight="600" fill="#2563eb">a² + b² = c²</text>
+    <text x="90" y="518" font-size="23" fill="#64748b">Sine rule · Cosine rule · Right triangles</text>
+  </g>
+  <g stroke="#1d4ed8" stroke-width="9" stroke-linejoin="round">
+    <path d="M775 475 1120 475 990 205Z" fill="url(#triangle)" fill-opacity=".14" />
+    <path d="M775 475 1120 475 990 205Z" fill="none" />
+  </g>
+  <g font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700" fill="#1e40af">
+    <text x="935" y="520">c</text>
+    <text x="910" y="320">a</text>
+    <text x="1067" y="325">b</text>
+    <text x="810" y="450">α</text>
+    <text x="1080" y="450">β</text>
+    <text x="973" y="245">γ</text>
+  </g>
+</svg>
