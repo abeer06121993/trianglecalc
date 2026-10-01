@@ -1,4 +1,4 @@
-import { convertLength, formatLength, formatLengthValue, formatCalculationResult, formatCalculationSubstitution, getTriangleVertices, solveTriangle, classifyTriangle } from '../triangle.ts';
+import { convertLength, formatAngle, formatLength, formatLengthValue, formatCalculationResult, formatCalculationSubstitution, getTriangleVertices, solveTriangle, classifyTriangle } from '../triangle.ts';
 import { getDiagramSolutions } from '../triangleDiagram.ts';
 
 interface TestCase {
@@ -407,14 +407,14 @@ const explanationChecks: { name: string; passed: boolean }[] = [
     })(),
   },
   {
-    name: 'No-solution SSA and invalid or contradictory inputs have no explanation',
+    name: 'Unexplained validation errors stay plain while a detected angle conflict carries details',
     passed: (() => {
       const impossible = solveTriangle({ a: 3, b: 10, c: null, alpha: 30, beta: null, gamma: null });
-      const invalid = solveTriangle({ a: 5, b: 7, c: 1, alpha: null, beta: null, gamma: null });
+      const invalid = solveTriangle({ a: -5, b: 7, c: 8, alpha: null, beta: null, gamma: null });
       const conflict = solveTriangle({ a: 5, b: 7, c: 8, alpha: 30, beta: null, gamma: null });
       return impossible.status.kind === 'invalid' && !('explanation' in impossible.status)
         && invalid.status.kind === 'invalid' && !('explanation' in invalid.status)
-        && conflict.status.kind === 'contradictory' && !('explanation' in conflict.status);
+        && conflict.status.kind === 'contradictory' && conflict.status.explanation?.kind === 'angle-conflict';
     })(),
   },
 ];
@@ -474,6 +474,71 @@ const explanationFormattingChecks: { name: string; passed: boolean }[] = [
   },
 ];
 
+const errorExplanationChecks: { name: string; passed: boolean }[] = [
+  {
+    name: 'Triangle inequality details identify longest side and exact failing sum in all side orders',
+    passed: (() => {
+      const first = solveTriangle({ a: 5, b: 7, c: 1, alpha: null, beta: null, gamma: null });
+      const second = solveTriangle({ a: 3, b: 4, c: 8, alpha: null, beta: null, gamma: null });
+      const third = solveTriangle({ a: 8, b: 3, c: 4, alpha: null, beta: null, gamma: null });
+      return first.status.kind === 'invalid' && first.status.explanation?.kind === 'triangle-inequality'
+        && first.status.explanation.longestSide.side === 'b' && first.status.explanation.longestSide.value === 7
+        && first.status.explanation.otherSides[0].value === 5 && first.status.explanation.otherSides[1].value === 1
+        && first.status.explanation.sum === 6 && first.status.explanation.comparison === 'less-than'
+        && second.status.kind === 'invalid' && second.status.explanation?.kind === 'triangle-inequality'
+        && second.status.explanation.longestSide.side === 'c' && second.status.explanation.longestSide.value === 8
+        && second.status.explanation.sum === 7
+        && third.status.kind === 'invalid' && third.status.explanation?.kind === 'triangle-inequality'
+        && third.status.explanation.longestSide.side === 'a' && third.status.explanation.sum === 7;
+    })(),
+  },
+  {
+    name: 'Triangle inequality equality boundary is explained as equal, not less than',
+    passed: (() => {
+      const result = solveTriangle({ a: 5, b: 5, c: 10, alpha: null, beta: null, gamma: null });
+      return result.status.kind === 'invalid'
+        && result.status.explanation?.kind === 'triangle-inequality'
+        && result.status.explanation.sum === 10
+        && result.status.explanation.comparison === 'equal-to';
+    })(),
+  },
+  {
+    name: 'Angle conflict details preserve solver values and use the calculator angle rounding',
+    passed: (() => {
+      const result = solveTriangle({ a: 5, b: 7, c: 8, alpha: 30, beta: null, gamma: null });
+      return result.status.kind === 'contradictory'
+        && result.status.explanation?.kind === 'angle-conflict'
+        && result.status.explanation.angle === 'alpha'
+        && approx(result.status.explanation.calculatedAngle, 38.2132107, 1e-6)
+        && result.status.explanation.enteredAngle === 30
+        && formatAngle(result.status.explanation.calculatedAngle) === '38.21°'
+        && result.status.explanation.calculatedAngle !== 38.21;
+    })(),
+  },
+  {
+    name: 'Error explanation lengths follow the selected cm or inch display unit',
+    passed: (() => {
+      const result = solveTriangle({ a: 5, b: 7, c: 1, alpha: null, beta: null, gamma: null });
+      return result.status.kind === 'invalid'
+        && result.status.explanation?.kind === 'triangle-inequality'
+        && formatLength(result.status.explanation.longestSide.value, 'cm') === '7.00 cm'
+        && formatLength(result.status.explanation.longestSide.value, 'inch') === '2.76 inch'
+        && formatLength(result.status.explanation.sum, 'inch') === '2.36 inch';
+    })(),
+  },
+  {
+    name: 'Valid solved result keeps its normal calculation explanation and insufficient input has no error explanation',
+    passed: (() => {
+      const solved = solveTriangle({ a: 3, b: 4, c: 5, alpha: null, beta: null, gamma: null });
+      const insufficient = solveTriangle({ a: 5, b: null, c: null, alpha: null, beta: null, gamma: null });
+      return solved.status.kind === 'solved'
+        && solved.status.explanation.method === 'cosine-rule'
+        && insufficient.status.kind === 'insufficient'
+        && !('explanation' in insufficient.status);
+    })(),
+  },
+];
+
 for (const check of explanationChecks) {
   if (check.passed) {
     passed++;
@@ -485,6 +550,16 @@ for (const check of explanationChecks) {
 }
 
 for (const check of explanationFormattingChecks) {
+  if (check.passed) {
+    passed++;
+    console.log(`  ✓ ${check.name}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${check.name}`);
+  }
+}
+
+for (const check of errorExplanationChecks) {
   if (check.passed) {
     passed++;
     console.log(`  ✓ ${check.name}`);

@@ -54,12 +54,27 @@ export interface CalculationExplanation {
   steps: CalculationStep[];
 }
 
+export type SolveErrorExplanation =
+  | {
+    kind: 'triangle-inequality';
+    longestSide: { side: 'a' | 'b' | 'c'; value: number };
+    otherSides: [{ side: 'a' | 'b' | 'c'; value: number }, { side: 'a' | 'b' | 'c'; value: number }];
+    sum: number;
+    comparison: 'less-than' | 'equal-to';
+  }
+  | {
+    kind: 'angle-conflict';
+    angle: 'alpha' | 'beta' | 'gamma';
+    calculatedAngle: number;
+    enteredAngle: number;
+  };
+
 export type SolutionStatus =
   | { kind: 'solved'; solution: TriangleSolution; explanation: CalculationExplanation }
   | { kind: 'multiple'; solutions: [TriangleSolution, TriangleSolution]; explanations: [CalculationExplanation, CalculationExplanation] }
   | { kind: 'insufficient'; message: string }
-  | { kind: 'contradictory'; message: string }
-  | { kind: 'invalid'; message: string };
+  | { kind: 'contradictory'; message: string; explanation?: SolveErrorExplanation }
+  | { kind: 'invalid'; message: string; explanation?: SolveErrorExplanation };
 
 export type SolveMethod =
   | 'SSS'
@@ -150,6 +165,22 @@ function anglesSumValid(a1: number, a2: number, a3: number): boolean {
 }
 
 const ANGLE_CONSISTENCY_TOLERANCE_DEGREES = 0.1;
+
+function triangleInequalityExplanation(a: number, b: number, c: number): SolveErrorExplanation {
+  const [longestSide, ...otherSides] = [
+    { side: 'a' as const, value: a },
+    { side: 'b' as const, value: b },
+    { side: 'c' as const, value: c },
+  ].sort((first, second) => second.value - first.value);
+  const sum = otherSides[0].value + otherSides[1].value;
+  return {
+    kind: 'triangle-inequality',
+    longestSide,
+    otherSides: [otherSides[0], otherSides[1]],
+    sum,
+    comparison: sum < longestSide.value ? 'less-than' : 'equal-to',
+  };
+}
 
 function sssExplanation(solution: TriangleSolution): CalculationExplanation {
   const steps: CalculationStep[] = [];
@@ -308,7 +339,10 @@ export function solveTriangle(input: TriangleInput): SolveResult {
   // Three sides fully determine feasibility and shape, regardless of extra angles.
   if (a !== null && b !== null && c !== null) {
     if (!triangleInequality(a, b, c)) {
-      return invalidResult('The three side lengths cannot form a triangle. The sum of any two sides must be greater than the third side.');
+      return invalidResult(
+        'The three side lengths cannot form a triangle. The sum of any two sides must be greater than the third side.',
+        triangleInequalityExplanation(a, b, c),
+      );
     }
 
     const sideDetermined: TriangleSolution = {
@@ -326,7 +360,15 @@ export function solveTriangle(input: TriangleInput): SolveResult {
       provided !== null && Math.abs(provided - calculated) > ANGLE_CONSISTENCY_TOLERANCE_DEGREES,
     );
     if (conflict) {
-      return contradictoryResult(`The entered ${conflict.name} conflicts with the angle determined by the three side lengths.`);
+      return contradictoryResult(
+        `The entered ${conflict.name} conflicts with the angle determined by the three side lengths.`,
+        {
+          kind: 'angle-conflict',
+          angle: conflict.name as 'alpha' | 'beta' | 'gamma',
+          calculatedAngle: conflict.calculated,
+          enteredAngle: conflict.provided!,
+        },
+      );
     }
     return solvedResult(sideDetermined, 'SSS', sssExplanation(sideDetermined));
   }
@@ -672,12 +714,12 @@ function insufficientResult(message: string): SolveResult {
   return { status: { kind: 'insufficient', message }, method: null };
 }
 
-function contradictoryResult(message: string): SolveResult {
-  return { status: { kind: 'contradictory', message }, method: null };
+function contradictoryResult(message: string, explanation?: SolveErrorExplanation): SolveResult {
+  return { status: { kind: 'contradictory', message, ...(explanation ? { explanation } : {}) }, method: null };
 }
 
-function invalidResult(message: string): SolveResult {
-  return { status: { kind: 'invalid', message }, method: null };
+function invalidResult(message: string, explanation?: SolveErrorExplanation): SolveResult {
+  return { status: { kind: 'invalid', message, ...(explanation ? { explanation } : {}) }, method: null };
 }
 
 // --- Unit conversion ---

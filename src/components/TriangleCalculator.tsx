@@ -266,6 +266,7 @@ export default function TriangleCalculator() {
               knownCount={knownCount}
               result={liveResult}
               hasAnyValue={hasAnyValue}
+              unit={unit}
             />
           </div>
 
@@ -393,16 +394,45 @@ function LiveFeedback({
   knownCount,
   result,
   hasAnyValue,
+  unit,
 }: {
   knownCount: number;
   result: SolveResult | null;
   hasAnyValue: boolean;
+  unit: Unit;
 }) {
   if (result?.status.kind === 'invalid' || result?.status.kind === 'contradictory') {
+    const status = result.status;
+    const t = getTranslation();
+    const explanation = status.explanation;
     return (
-      <div className="flex items-center justify-center gap-2 text-xs text-red-500">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500" aria-hidden="true" />
-        <span>{result.status.message}</span>
+      <div className="rounded-lg border border-red-100 bg-red-50/70 p-3 text-sm text-red-700">
+        <div className="flex items-center justify-center gap-2 text-xs font-semibold">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500" aria-hidden="true" />
+          <span>{explanation?.kind === 'triangle-inequality' ? t.statusInvalid
+            : explanation?.kind === 'angle-conflict' ? t.statusContradictory
+              : status.message}</span>
+        </div>
+        {explanation?.kind === 'triangle-inequality' && (
+          <div className="mt-3 space-y-1.5 text-xs leading-relaxed">
+            <p className="font-semibold">{t.whyLabel}</p>
+            <p>{t.longestSideExplanation} <strong>{explanation.longestSide.side} = {formatLength(explanation.longestSide.value, unit)}</strong>.</p>
+            <p>{t.otherSidesExplanation} {explanation.otherSides.map((side, index) => (
+              <span key={side.side}>{index > 0 ? ' and ' : ''}<strong>{side.side} = {formatLength(side.value, unit)}</strong></span>
+            ))}.</p>
+            <p><strong>{formatLength(explanation.otherSides[0].value, unit).replace(` ${unit}`, '')} + {formatLength(explanation.otherSides[1].value, unit).replace(` ${unit}`, '')} = {formatLength(explanation.sum, unit)}</strong></p>
+            <p>{formatLength(explanation.sum, unit)} {explanation.comparison === 'less-than' ? t.lessThanExplanation : t.equalToExplanation} {formatLength(explanation.longestSide.value, unit)}.</p>
+            <p className="font-medium">{t.cannotFormTriangleExplanation}</p>
+          </div>
+        )}
+        {explanation?.kind === 'angle-conflict' && (
+          <div className="mt-3 space-y-1.5 text-xs leading-relaxed">
+            <p className="font-semibold">{t.whyLabel}</p>
+            <p>{t.basedOnSidesExplanation} {explanation.angle === 'alpha' ? 'α' : explanation.angle === 'beta' ? 'β' : 'γ'} {t.shouldBeExplanation} <strong>{formatAngle(explanation.calculatedAngle)}</strong>.</p>
+            <p>{t.enteredAngleExplanation} <strong>{formatAngle(explanation.enteredAngle)}</strong>.</p>
+            <p className="font-medium">{t.differentTrianglesExplanation}</p>
+          </div>
+        )}
       </div>
     );
   }

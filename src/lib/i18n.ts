@@ -38,6 +38,18 @@ export const translations = {
     statusMultipleMsg: 'These values can describe two different triangles.',
     statusInsufficient: 'More information needed',
     statusInvalid: 'No valid triangle',
+    statusContradictory: 'Your values do not agree.',
+    whyLabel: 'Why?',
+    longestSideExplanation: 'The longest side is',
+    otherSidesExplanation: 'The other two sides are',
+    sideSumExplanation: 'The other sides add up to',
+    lessThanExplanation: 'is less than',
+    equalToExplanation: 'is equal to',
+    cannotFormTriangleExplanation: 'These side lengths cannot form a triangle.',
+    basedOnSidesExplanation: 'Based on the side lengths, angle',
+    shouldBeExplanation: 'should be',
+    enteredAngleExplanation: 'You entered',
+    differentTrianglesExplanation: 'These values describe different triangles.',
 
     // Results
     resultTitle: 'Triangle Result',
