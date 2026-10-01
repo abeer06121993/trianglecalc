@@ -1,5 +1,8 @@
 import { convertLength, formatAngle, formatLength, formatLengthValue, formatCalculationResult, formatCalculationSubstitution, getTriangleVertices, solveTriangle, classifyTriangle } from '../triangle.ts';
 import { getDiagramSolutions } from '../triangleDiagram.ts';
+import { appRoutes, educationalSectionNavigation, learnInformationArchitecture, legalPageRoutes, prerenderedRoutes, productNavigation } from '../routes.ts';
+import { getPageMetadata } from '../seo.ts';
+import { triangleSidesFromAngles } from '../triangleBasicsGeometry.ts';
 
 interface TestCase {
   name: string;
@@ -539,6 +542,67 @@ const errorExplanationChecks: { name: string; passed: boolean }[] = [
   },
 ];
 
+const informationArchitectureChecks: { name: string; passed: boolean }[] = [
+  {
+    name: 'Product navigation exposes Calculator and Triangle Basics as active destinations',
+    passed: productNavigation.length === 4
+      && productNavigation[0].key === 'calculator'
+      && productNavigation[0].href === appRoutes.calculator
+      && productNavigation[0].state === 'available'
+      && productNavigation[1].key === 'learn'
+      && productNavigation[1].href === appRoutes.learnTriangleBasics
+      && productNavigation[1].state === 'available'
+      && productNavigation.slice(2).every((item) => item.state === 'coming-soon' && !('href' in item)),
+  },
+  {
+    name: 'Current routes and prerender allowlist include homepage, legal pages and Triangle Basics',
+    passed: appRoutes.calculator === '/'
+      && appRoutes.learnTriangleBasics === '/learn/triangle-basics'
+      && Object.keys(legalPageRoutes).sort().join(',') === '/contact,/imprint,/privacy'
+      && [...prerenderedRoutes].sort().join(',') === '/,/contact,/imprint,/learn/triangle-basics,/privacy',
+  },
+  {
+    name: 'Triangle Basics has dedicated indexable metadata while future Learn routes remain noindex',
+    passed: getPageMetadata(appRoutes.learnTriangleBasics).title === 'Triangle Basics – Sides, Angles & Types of Triangles'
+      && getPageMetadata(appRoutes.learnTriangleBasics).canonical === 'https://trianglecalc.com/learn/triangle-basics'
+      && getPageMetadata(appRoutes.learnTriangleBasics).robots === 'index, follow'
+      && getPageMetadata('/learn/cosine-rule').robots === 'noindex, nofollow'
+      && getPageMetadata('/learn/cosine-rule').canonical === null,
+  },
+  {
+    name: 'Existing educational section anchor navigation remains available outside the main product nav',
+    passed: educationalSectionNavigation.map((item) => item.href).join(',') === '#how-it-works,#formulas,#faq',
+  },
+  {
+    name: 'Triangle Basics lesson sections use the requested beginner learning order',
+    passed: learnInformationArchitecture[0].items.join('|') === [
+      'What Is a Triangle?',
+      'Where Are Triangles Used?',
+      'Why Do We Calculate Triangles?',
+      'Sides and Angles',
+      'Types of Triangles',
+      'How Are Triangles Described?',
+      'Try It Yourself',
+    ].join('|'),
+  },
+  {
+    name: 'Interactive learning triangle preserves its angle sum and opposite-side sine ratios',
+    passed: (() => {
+      const alpha = 60;
+      const beta = 50;
+      const gamma = 180 - alpha - beta;
+      const sides = triangleSidesFromAngles(5, alpha, beta);
+      const close = (left: number, right: number) => Math.abs(left - right) < 1e-10;
+      return close(alpha + beta + gamma, 180)
+        && close(sides.a / Math.sin(alpha * Math.PI / 180), sides.b / Math.sin(beta * Math.PI / 180))
+        && close(sides.a / Math.sin(alpha * Math.PI / 180), sides.c / Math.sin(gamma * Math.PI / 180))
+        && sides.a + sides.b > sides.c
+        && sides.a + sides.c > sides.b
+        && sides.b + sides.c > sides.a;
+    })(),
+  },
+];
+
 for (const check of explanationChecks) {
   if (check.passed) {
     passed++;
@@ -560,6 +624,16 @@ for (const check of explanationFormattingChecks) {
 }
 
 for (const check of errorExplanationChecks) {
+  if (check.passed) {
+    passed++;
+    console.log(`  ✓ ${check.name}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${check.name}`);
+  }
+}
+
+for (const check of informationArchitectureChecks) {
   if (check.passed) {
     passed++;
     console.log(`  ✓ ${check.name}`);

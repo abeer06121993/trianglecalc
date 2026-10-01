@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
-import { Menu, Triangle as TriangleIcon, X } from 'lucide-react';
+import { useEffect } from 'react';
+import { Triangle as TriangleIcon } from 'lucide-react';
 import { getTranslation, faqData } from '@/lib/i18n';
 import TriangleCalculator from '@/components/TriangleCalculator';
 import { EducationalContent } from '@/components/EducationalContent';
 import { AdSlot } from '@/components/AdSlot';
 import { LegalPage } from '@/components/LegalPage';
+import { TriangleBasicsPage } from '@/components/TriangleBasicsPage';
+import { PageContainer, PageSection } from '@/components/PageContainer';
+import { SectionNavigation } from '@/components/SectionNavigation';
+import { SiteFooter } from '@/components/SiteFooter';
+import { SiteHeader } from '@/components/SiteHeader';
+import { appRoutes, legalPageRoutes } from '@/lib/routes';
 import {
   getPageMetadata,
   normalizeRoutePath,
@@ -62,13 +68,42 @@ function RouteMetadata({ metadata }: { metadata: PageMetadata }) {
   return null;
 }
 
-function StructuredData() {
+function StructuredData({ pathname }: { pathname: string }) {
+  if (pathname === appRoutes.learnTriangleBasics) {
+    const learningResourceSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'LearningResource',
+      name: 'Triangle Basics: Sides, Angles & Types of Triangles',
+      description: routeMetadata[appRoutes.learnTriangleBasics].description,
+      url: routeMetadata[appRoutes.learnTriangleBasics].canonical,
+      inLanguage: 'en',
+      learningResourceType: 'Interactive lesson',
+      educationalLevel: 'Beginner',
+      about: ['Triangles', 'Triangle sides', 'Triangle angles', 'Types of triangles'],
+    };
+    const breadcrumbSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Triangle Calculator', item: routeMetadata[appRoutes.calculator].canonical },
+        { '@type': 'ListItem', position: 2, name: 'Learn: Triangle Basics', item: routeMetadata[appRoutes.learnTriangleBasics].canonical },
+      ],
+    };
+
+    return (
+      <>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(learningResourceSchema) }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }} />
+      </>
+    );
+  }
+
   const websiteSchema = {
     '@context': 'https://schema.org',
     '@type': 'WebApplication',
     name: 'Triangle Calculator',
-    description: routeMetadata['/'].description,
-    url: 'https://trianglecalc.com/',
+    description: routeMetadata[appRoutes.calculator].description,
+    url: routeMetadata[appRoutes.calculator].canonical,
     applicationCategory: 'MathematicsApplication',
     operatingSystem: 'Any',
     offers: {
@@ -113,146 +148,43 @@ function StructuredData() {
   );
 }
 
-function Header() {
-  const t = getTranslation();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const firstMenuLinkRef = useRef<HTMLAnchorElement>(null);
-  const navItems = [
-    { label: t.siteName, href: '#top' },
-    { label: t.navHowItWorks, href: '#how-it-works' },
-    { label: t.navFormulas, href: '#formulas' },
-    { label: t.navFaq, href: '#faq' },
-  ];
-
-  useEffect(() => {
-    if (!mobileMenuOpen) return;
-
-    firstMenuLinkRef.current?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setMobileMenuOpen(false);
-        menuButtonRef.current?.focus();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [mobileMenuOpen]);
-
-  const closeMobileMenu = () => {
-    setMobileMenuOpen(false);
-    requestAnimationFrame(() => menuButtonRef.current?.focus());
-  };
-
-  return (
-    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-sm border-b border-slate-200">
-      <nav className="max-w-6xl mx-auto px-4 sm:px-6" aria-label="Main navigation">
-        <div className="h-14 flex items-center justify-between gap-3">
-          <a href="#top" className="flex min-w-0 items-center gap-2 font-semibold text-slate-900">
-            <TriangleIcon className="w-5 h-5 flex-shrink-0 text-blue-600" aria-hidden="true" />
-            <span className="truncate text-sm sm:text-base">{t.siteName}</span>
-          </a>
-          <ul className="hidden md:flex items-center gap-1 sm:gap-4">
-            {navItems.slice(1).map((item) => (
-              <li key={item.href}>
-                <a
-                  href={item.href}
-                  className="text-xs sm:text-sm text-slate-600 hover:text-slate-900 px-2 sm:px-3 py-1.5 rounded-md hover:bg-slate-100 transition-colors"
-                >
-                  {item.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-          <button
-            ref={menuButtonRef}
-            type="button"
-            className="md:hidden inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-navigation"
-            onClick={() => setMobileMenuOpen((open) => !open)}
-          >
-            {mobileMenuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
-          </button>
-        </div>
-        {mobileMenuOpen && (
-          <ul id="mobile-navigation" className="md:hidden -mx-4 sm:-mx-6 border-t border-slate-200 bg-white px-2 py-2 shadow-lg">
-            {navItems.slice(1).map((item, index) => (
-              <li key={item.href}>
-                <a
-                  ref={index === 0 ? firstMenuLinkRef : undefined}
-                  href={item.href}
-                  onClick={closeMobileMenu}
-                  className="block rounded-lg px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                >
-                  {item.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </nav>
-    </header>
-  );
-}
-
 function Hero() {
   const t = getTranslation();
 
   return (
-    <section className="pt-6 sm:pt-10 pb-4" id="top">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+    <PageSection id="top" className="pb-4 pt-6 sm:pt-10">
+      <PageContainer>
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 leading-tight mb-3">
           {t.heroTitle}
         </h1>
         <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-2xl">
           {t.heroIntro}
         </p>
-      </div>
-    </section>
+      </PageContainer>
+    </PageSection>
   );
 }
 
 function CalculatorSection() {
   return (
-    <section className="pb-8" aria-label="Triangle calculator">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+    <PageSection className="pb-8" ariaLabel="Triangle calculator">
+      <PageContainer>
         <TriangleCalculator />
         <AdSlot className="mt-6" />
-      </div>
-    </section>
+      </PageContainer>
+    </PageSection>
   );
 }
 
 function ContentSection() {
   return (
-    <section id="how-it-works" className="py-12 sm:py-16 border-t border-slate-100">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+    <PageSection id="how-it-works" className="border-t border-slate-100 py-12 sm:py-16">
+      <PageContainer size="content">
+        <SectionNavigation />
         <AdSlot className="mb-10" />
         <EducationalContent />
-      </div>
-    </section>
-  );
-}
-
-function Footer({ year }: { year: number }) {
-  const t = getTranslation();
-
-  return (
-    <footer className="border-t border-slate-200 py-8 bg-slate-50">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-        <p className="text-sm text-slate-500 leading-relaxed mb-2">
-          {t.footerNote}
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-slate-400 mb-3">
-          <a href="/privacy" className="hover:text-slate-600">Privacy Policy</a>
-          <a href="/imprint" className="hover:text-slate-600">Imprint</a>
-          <a href="/contact" className="hover:text-slate-600">Contact</a>
-        </div>
-        <p className="text-xs text-slate-400">© {year} {t.footerRights}</p>
-      </div>
-    </footer>
+      </PageContainer>
+    </PageSection>
   );
 }
 
@@ -265,11 +197,22 @@ function App({ pathname, prerenderedYear }: AppProps = {}) {
   const path = normalizeRoutePath(pathname ?? (typeof window === 'undefined' ? '/' : window.location.pathname));
   const metadata = getPageMetadata(path);
 
-  if (path === '/privacy') return <><RouteMetadata metadata={metadata} /><LegalPage type="privacy" /></>;
-  if (path === '/imprint') return <><RouteMetadata metadata={metadata} /><LegalPage type="imprint" /></>;
-  if (path === '/contact') return <><RouteMetadata metadata={metadata} /><LegalPage type="contact" /></>;
+  const legalPageType = legalPageRoutes[path as keyof typeof legalPageRoutes];
+  if (legalPageType) return <><RouteMetadata metadata={metadata} /><LegalPage type={legalPageType} /></>;
 
-  if (path !== '/') {
+  if (path === appRoutes.learnTriangleBasics) {
+    return (
+      <div className="min-h-screen bg-white text-slate-900">
+        <RouteMetadata metadata={metadata} />
+        <StructuredData pathname={path} />
+        <SiteHeader activeRoute={path} />
+        <TriangleBasicsPage />
+        <SiteFooter year={prerenderedYear ?? new Date().getFullYear()} />
+      </div>
+    );
+  }
+
+  if (path !== appRoutes.calculator) {
     return (
       <>
         <RouteMetadata metadata={metadata} />
@@ -291,14 +234,14 @@ function App({ pathname, prerenderedYear }: AppProps = {}) {
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <RouteMetadata metadata={metadata} />
-      <StructuredData />
-      <Header />
+      <StructuredData pathname={path} />
+      <SiteHeader />
       <main>
         <Hero />
         <CalculatorSection />
         <ContentSection />
       </main>
-      <Footer year={prerenderedYear ?? new Date().getFullYear()} />
+      <SiteFooter year={prerenderedYear ?? new Date().getFullYear()} />
     </div>
   );
 }

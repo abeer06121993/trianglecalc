@@ -1,9 +1,10 @@
 import { StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
 import App from './App';
+import { prerenderedRoutes } from './lib/routes';
 import { getPageMetadata, normalizeRoutePath, renderSeoMetadata, routeMetadata } from './lib/seo';
 
-const prerenderPaths = ['/', '/privacy', '/imprint', '/contact'] as const;
+const prerenderPaths = prerenderedRoutes;
 
 export { prerenderPaths };
 

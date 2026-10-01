@@ -1,3 +1,5 @@
+import { appRoutes } from './routes.ts';
+
 export interface PageMetadata {
   title: string;
   description: string;
@@ -6,28 +8,34 @@ export interface PageMetadata {
 }
 
 export const routeMetadata: Record<string, PageMetadata> = {
-  '/': {
+  [appRoutes.calculator]: {
     title: 'Triangle Calculator – Calculate Missing Sides & Angles',
     description: 'Free triangle calculator to find missing sides and angles. Enter the values you know and calculate a triangle using the sine rule, cosine rule, Pythagorean theorem and more.',
     canonical: 'https://trianglecalc.com/',
     robots: 'index, follow, max-image-preview:large',
   },
-  '/privacy': {
+  [appRoutes.privacy]: {
     title: 'Privacy Policy | Triangle Calculator',
     description: 'Information about website operation, hosting, advertising and contact details for TriangleCalc.',
     canonical: 'https://trianglecalc.com/privacy',
     robots: 'index, follow',
   },
-  '/imprint': {
+  [appRoutes.imprint]: {
     title: 'Imprint | Triangle Calculator',
     description: 'Imprint information for TriangleCalc, including operator, contact and editorial responsibility details.',
     canonical: 'https://trianglecalc.com/imprint',
     robots: 'index, follow',
   },
-  '/contact': {
+  [appRoutes.contact]: {
     title: 'Contact | Triangle Calculator',
     description: 'Contact page for questions, corrections or feedback about TriangleCalc.',
     canonical: 'https://trianglecalc.com/contact',
+    robots: 'index, follow',
+  },
+  [appRoutes.learnTriangleBasics]: {
+    title: 'Triangle Basics – Sides, Angles & Types of Triangles',
+    description: 'Learn what triangles are, how their sides and angles relate, where they appear in everyday life, and how to recognize common triangle types.',
+    canonical: 'https://trianglecalc.com/learn/triangle-basics',
     robots: 'index, follow',
   },
 };

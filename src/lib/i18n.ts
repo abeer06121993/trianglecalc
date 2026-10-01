@@ -7,6 +7,15 @@ export const translations = {
   en: {
     // Header
     siteName: 'Triangle Calculator',
+    primaryNavigation: 'Primary navigation',
+    navCalculator: 'Calculator',
+    navLearn: 'Learn',
+    navPractice: 'Practice',
+    navKids: 'Kids',
+    comingSoon: 'Coming soon',
+    openNavigationMenu: 'Open navigation menu',
+    closeNavigationMenu: 'Close navigation menu',
+    educationalSectionNavigation: 'On this page',
     navHowItWorks: 'How It Works',
     navFormulas: 'Triangle Formulas',
     navFaq: 'FAQ',
