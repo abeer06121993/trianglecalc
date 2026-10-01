@@ -1,4 +1,4 @@
-import { convertLength, formatLength, formatLengthValue, getTriangleVertices, solveTriangle, classifyTriangle } from '../triangle.ts';
+import { convertLength, formatLength, formatLengthValue, formatCalculationResult, formatCalculationSubstitution, getTriangleVertices, solveTriangle, classifyTriangle } from '../triangle.ts';
 import { getDiagramSolutions } from '../triangleDiagram.ts';
 
 interface TestCase {
@@ -419,7 +419,72 @@ const explanationChecks: { name: string; passed: boolean }[] = [
   },
 ];
 
+function visibleExplanationText(explanation: NonNullable<Extract<ReturnType<typeof solveTriangle>['status'], { kind: 'solved' }>['explanation']>, unit: 'cm' | 'inch'): string {
+  return explanation.steps.map((step) => `${formatCalculationSubstitution(step, unit)} ${step.resultLabel} = ${formatCalculationResult(step, unit)}`).join(' ');
+}
+
+const explanationFormattingChecks: { name: string; passed: boolean }[] = [
+  {
+    name: 'Visible explanations use at most two decimals for SSS, SAS, ASA/AAS, SSA and right-angle cases',
+    passed: (() => {
+      const inputs = [
+        { a: 3, b: 4, c: 5, alpha: null, beta: null, gamma: null },
+        { a: 3, b: 4, c: null, alpha: null, beta: null, gamma: 90 },
+        { a: null, b: 5, c: null, alpha: 40, beta: 60, gamma: null },
+        { a: 10, b: null, c: null, alpha: 40, beta: null, gamma: 80 },
+        { a: 5, b: 7, c: null, alpha: 30, beta: null, gamma: null },
+        { a: 4, b: 8, c: null, alpha: 30, beta: null, gamma: null },
+      ];
+      const explanations = inputs.flatMap((input) => {
+        const result = solveTriangle(input);
+        return result.status.kind === 'solved'
+          ? [result.status.explanation]
+          : result.status.kind === 'multiple' ? result.status.explanations : [];
+      });
+      return explanations.length === 7
+        && explanations.every((explanation) => !/\d+\.\d{3,}/.test(visibleExplanationText(explanation, 'cm')));
+    })(),
+  },
+  {
+    name: 'Both SSA solutions show rounded angles while retaining full-precision solver values',
+    passed: (() => {
+      const result = solveTriangle({ a: 5, b: 7, c: null, alpha: 30, beta: null, gamma: null });
+      if (result.status.kind !== 'multiple') return false;
+      const [first, second] = result.status.explanations;
+      const firstText = visibleExplanationText(first, 'cm');
+      const secondText = visibleExplanationText(second, 'cm');
+      return firstText.includes('44.43°')
+        && secondText.includes('135.57°')
+        && firstText.includes('105.57°')
+        && secondText.includes('14.43°')
+        && result.status.solutions[0].beta !== Number(result.status.solutions[0].beta.toFixed(2));
+    })(),
+  },
+  {
+    name: 'Explanation side substitutions and results follow cm/inch display formatting',
+    passed: (() => {
+      const result = solveTriangle({ a: 3, b: 4, c: 5, alpha: null, beta: null, gamma: null });
+      if (result.status.kind !== 'solved') return false;
+      const cmText = visibleExplanationText(result.status.explanation, 'cm');
+      const inchText = visibleExplanationText(result.status.explanation, 'inch');
+      return cmText.includes('3.00') && inchText.includes('1.18') && inchText.includes('1.57')
+        && inchText.includes('1.97') && !/\d+\.\d{3,}/.test(inchText)
+        && result.status.explanation.steps[0].substitutionValues[0].value === 4;
+    })(),
+  },
+];
+
 for (const check of explanationChecks) {
+  if (check.passed) {
+    passed++;
+    console.log(`  ✓ ${check.name}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${check.name}`);
+  }
+}
+
+for (const check of explanationFormattingChecks) {
   if (check.passed) {
     passed++;
     console.log(`  ✓ ${check.name}`);

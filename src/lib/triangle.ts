@@ -26,9 +26,27 @@ export interface TriangleSolution {
 export interface CalculationStep {
   formula: string;
   substitution: string;
+  substitutionValues: { value: number; kind: 'length' | 'angle' }[];
   resultLabel: string;
   resultValue: number;
   resultKind: 'length' | 'angle';
+}
+
+/** Formats a solver-provided substitution for display without changing its stored values. */
+export function formatCalculationSubstitution(step: CalculationStep, unit: Unit): string {
+  return step.substitution.replace(/\{(\d+)\}/g, (placeholder, index: string) => {
+    const value = step.substitutionValues[Number(index)];
+    if (!value) return placeholder;
+    return value.kind === 'length'
+      ? formatLengthValue(value.value, unit)
+      : formatAngle(value.value);
+  });
+}
+
+export function formatCalculationResult(step: CalculationStep, unit: Unit): string {
+  return step.resultKind === 'length'
+    ? formatLength(step.resultValue, unit)
+    : formatAngle(step.resultValue);
 }
 
 export interface CalculationExplanation {
@@ -140,7 +158,12 @@ function sssExplanation(solution: TriangleSolution): CalculationExplanation {
   ] as const) {
     steps.push({
       formula: `${angleKey} = cos⁻¹((${adjacent1}² + ${adjacent2}² − ${opposite}²) / (2·${adjacent1}·${adjacent2}))`,
-      substitution: `cos⁻¹((${solution[adjacent1]}² + ${solution[adjacent2]}² − ${solution[opposite]}²) / (2·${solution[adjacent1]}·${solution[adjacent2]}))`,
+      substitution: 'cos⁻¹(({0}² + {1}² − {2}²) / (2·{0}·{1}))',
+      substitutionValues: [
+        { value: solution[adjacent1], kind: 'length' },
+        { value: solution[adjacent2], kind: 'length' },
+        { value: solution[opposite], kind: 'length' },
+      ],
       resultLabel: angleKey,
       resultValue: solution[angleKey],
       resultKind: 'angle',
@@ -158,7 +181,12 @@ function sasExplanation(
 ): CalculationExplanation {
   const steps: CalculationStep[] = [{
     formula: `${target} = √(${side1}² + ${side2}² − 2·${side1}·${side2}·cos(${included}))`,
-    substitution: `√(${solution[side1]}² + ${solution[side2]}² − 2·${solution[side1]}·${solution[side2]}·cos(${solution[included]}°))`,
+    substitution: '√({0}² + {1}² − 2·{0}·{1}·cos({2}))',
+    substitutionValues: [
+      { value: solution[side1], kind: 'length' },
+      { value: solution[side2], kind: 'length' },
+      { value: solution[included], kind: 'angle' },
+    ],
     resultLabel: target,
     resultValue: solution[target],
     resultKind: 'length',
@@ -168,7 +196,12 @@ function sasExplanation(
     const [adjacent1, adjacent2] = (['a', 'b', 'c'] as const).filter((key) => key !== opposite);
     steps.push({
       formula: `${angleKey} = cos⁻¹((${adjacent1}² + ${adjacent2}² − ${opposite}²) / (2·${adjacent1}·${adjacent2}))`,
-      substitution: `cos⁻¹((${solution[adjacent1]}² + ${solution[adjacent2]}² − ${solution[opposite]}²) / (2·${solution[adjacent1]}·${solution[adjacent2]}))`,
+      substitution: 'cos⁻¹(({0}² + {1}² − {2}²) / (2·{0}·{1}))',
+      substitutionValues: [
+        { value: solution[adjacent1], kind: 'length' },
+        { value: solution[adjacent2], kind: 'length' },
+        { value: solution[opposite], kind: 'length' },
+      ],
       resultLabel: angleKey,
       resultValue: solution[angleKey],
       resultKind: 'angle',
@@ -197,7 +230,11 @@ function sineRuleExplanation(
     )!;
     steps.push({
       formula: `${missingKey} = 180° − ${angleSumInputs[0]} − ${angleSumInputs[2]}`,
-      substitution: `180° − ${angleSumInputs[1]}° − ${angleSumInputs[3]}°`,
+      substitution: '180° − {0} − {1}',
+      substitutionValues: [
+        { value: angleSumInputs[1], kind: 'angle' },
+        { value: angleSumInputs[3], kind: 'angle' },
+      ],
       resultLabel: missingKey,
       resultValue: solution[missingKey],
       resultKind: 'angle',
@@ -207,7 +244,12 @@ function sineRuleExplanation(
     const angleKey = key === 'a' ? 'alpha' : key === 'b' ? 'beta' : 'gamma';
     steps.push({
       formula: `${key} = ${knownSide} · sin(${angleKey}) / sin(${knownSide === 'a' ? 'alpha' : knownSide === 'b' ? 'beta' : 'gamma'})`,
-      substitution: `${knownLength} · sin(${solution[angleKey]}°) / sin(${knownAngle}°)`,
+      substitution: '{0} · sin({1}) / sin({2})',
+      substitutionValues: [
+        { value: knownLength, kind: 'length' },
+        { value: solution[angleKey], kind: 'angle' },
+        { value: knownAngle, kind: 'angle' },
+      ],
       resultLabel: key,
       resultValue: solution[key],
       resultKind: 'length',
@@ -451,15 +493,24 @@ function solveSSAPair(
     const thirdAngleKey = remainingSide === 'a' ? 'alpha' : remainingSide === 'b' ? 'beta' : 'gamma';
     const steps: CalculationStep[] = [{
       formula: 'h = adjacent side · sin(known angle)',
-      substitution: `${adjacentSide} · sin(${knownAngleDeg}°)`,
+      substitution: '{0} · sin({1})',
+      substitutionValues: [
+        { value: adjacentSide, kind: 'length' },
+        { value: knownAngleDeg, kind: 'angle' },
+      ],
       resultLabel: 'h', resultValue: h, resultKind: 'length',
     }];
     if (rightCase) {
-      steps.push({ formula: `${oppositeAngleKey} = 90°`, substitution: 'right angle', resultLabel: oppositeAngleKey, resultValue: solution[oppositeAngleKey], resultKind: 'angle' });
+      steps.push({ formula: `${oppositeAngleKey} = 90°`, substitution: 'right angle', substitutionValues: [], resultLabel: oppositeAngleKey, resultValue: solution[oppositeAngleKey], resultKind: 'angle' });
     } else {
       steps.push({
         formula: `sin(${oppositeAngleKey}) = adjacent side · sin(known angle) / opposite side`,
-        substitution: `${adjacentSide} · sin(${knownAngleDeg}°) / ${oppositeSide}`,
+        substitution: '{0} · sin({1}) / {2}',
+        substitutionValues: [
+          { value: adjacentSide, kind: 'length' },
+          { value: knownAngleDeg, kind: 'angle' },
+          { value: oppositeSide, kind: 'length' },
+        ],
         resultLabel: oppositeAngleKey, resultValue: solution[oppositeAngleKey], resultKind: 'angle',
       });
     }
@@ -467,14 +518,23 @@ function solveSSAPair(
       formula: rightCase
         ? `${thirdAngleKey} = 90° − ${angleKey}`
         : `${thirdAngleKey} = 180° − ${angleKey} − ${oppositeAngleKey}`,
-      substitution: rightCase
-        ? `90° − ${knownAngleDeg}°`
-        : `180° − ${knownAngleDeg}° − ${solution[oppositeAngleKey]}°`,
+      substitution: rightCase ? '90° − {0}' : '180° − {0} − {1}',
+      substitutionValues: rightCase
+        ? [{ value: knownAngleDeg, kind: 'angle' }]
+        : [
+          { value: knownAngleDeg, kind: 'angle' },
+          { value: solution[oppositeAngleKey], kind: 'angle' },
+        ],
       resultLabel: thirdAngleKey, resultValue: solution[thirdAngleKey], resultKind: 'angle',
     });
     steps.push({
       formula: `${remainingSide} = ${oppositeKey} · sin(${thirdAngleKey}) / sin(${angleKey})`,
-      substitution: `${oppositeSide} · sin(${solution[thirdAngleKey]}°) / sin(${knownAngleDeg}°)`,
+      substitution: '{0} · sin({1}) / sin({2})',
+      substitutionValues: [
+        { value: oppositeSide, kind: 'length' },
+        { value: solution[thirdAngleKey], kind: 'angle' },
+        { value: knownAngleDeg, kind: 'angle' },
+      ],
       resultLabel: remainingSide, resultValue: solution[remainingSide], resultKind: 'length',
     });
     return { method: 'ssa', steps };
