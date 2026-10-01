@@ -17,6 +17,7 @@ import {
 import { getTranslation } from '@/lib/i18n';
 import { getDiagramSolutions } from '@/lib/triangleDiagram';
 import TriangleDiagram, { type HighlightKey } from './TriangleDiagram';
+import { CalculationExplanationView } from './CalculationExplanation';
 
 type FieldKey = 'a' | 'b' | 'c' | 'alpha' | 'beta' | 'gamma';
 
@@ -278,6 +279,7 @@ export default function TriangleCalculator() {
                   method={liveResult.method}
                   knownKeys={knownKeys}
                   title={t.resultTitle}
+                  explanation={liveResult.status.explanation}
                 />
               )}
 
@@ -289,6 +291,7 @@ export default function TriangleCalculator() {
                     method={liveResult.method}
                     knownKeys={knownKeys}
                     title={t.solution1}
+                    explanation={liveResult.status.explanations[0]}
                   />
                   <ResultPanel
                     solution={liveResult.status.solutions[1]}
@@ -296,6 +299,7 @@ export default function TriangleCalculator() {
                     method={liveResult.method}
                     knownKeys={knownKeys}
                     title={t.solution2}
+                    explanation={liveResult.status.explanations[1]}
                   />
                   <p className="text-xs text-slate-500 italic px-1">{t.ambiguousNote}</p>
                 </div>
@@ -463,12 +467,14 @@ function ResultPanel({
   method,
   knownKeys,
   title,
+  explanation,
 }: {
   solution: TriangleSolution;
   unit: Unit;
   method: SolveMethod;
   knownKeys: Set<string>;
   title: string;
+  explanation: import('@/lib/triangle').CalculationExplanation;
 }) {
   const t = getTranslation();
   const classification = classifyTriangle(solution);
@@ -532,6 +538,7 @@ function ResultPanel({
           </dl>
         </div>
       </div>
+      <CalculationExplanationView explanation={explanation} unit={unit} />
     </div>
   );
 }

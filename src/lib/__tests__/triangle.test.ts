@@ -342,6 +342,93 @@ for (const check of unitChecks) {
   }
 }
 
+const explanationChecks: { name: string; passed: boolean }[] = [
+  {
+    name: 'SSS explanation uses cosine rule and carries the calculated alpha value',
+    passed: (() => {
+      const r = solveTriangle({ a: 3, b: 4, c: 5, alpha: null, beta: null, gamma: null });
+      return r.status.kind === 'solved'
+        && r.status.explanation.method === 'cosine-rule'
+        && r.status.explanation.steps[0].formula.includes('cos⁻¹')
+        && approx(r.status.explanation.steps[0].resultValue, r.status.solution.alpha, 1e-10);
+    })(),
+  },
+  {
+    name: 'SAS right triangle explanation documents cosine rule without inventing Pythagoras',
+    passed: (() => {
+      const r = solveTriangle({ a: 3, b: 4, c: null, alpha: null, beta: null, gamma: 90 });
+      return r.status.kind === 'solved'
+        && r.status.explanation.method === 'cosine-rule'
+        && r.status.explanation.steps[0].formula.includes('cos(gamma)')
+        && approx(r.status.explanation.steps[0].resultValue, r.status.solution.c, 1e-10);
+    })(),
+  },
+  {
+    name: 'ASA explanation includes the actual angle sum and sine-rule side results',
+    passed: (() => {
+      const r = solveTriangle({ a: null, b: 5, c: null, alpha: 40, beta: 60, gamma: null });
+      return r.status.kind === 'solved'
+        && r.status.explanation.steps[0].formula.includes('180°')
+        && r.status.explanation.steps.some((step) => step.formula.includes('sin(') && step.resultLabel === 'c')
+        && approx(r.status.solution.gamma, 80, 1e-10);
+    })(),
+  },
+  {
+    name: 'AAS explanation uses the entered angles and solved values',
+    passed: (() => {
+      const r = solveTriangle({ a: 10, b: null, c: null, alpha: 40, beta: null, gamma: 80 });
+      return r.status.kind === 'solved'
+        && r.status.explanation.steps[0].resultLabel === 'beta'
+        && approx(r.status.explanation.steps[0].resultValue, r.status.solution.beta, 1e-10);
+    })(),
+  },
+  {
+    name: 'Single SSA explanation reflects its solver result',
+    passed: (() => {
+      const r = solveTriangle({ a: 10, b: 8, c: null, alpha: 40, beta: null, gamma: null });
+      return r.status.kind === 'solved'
+        && r.status.explanation.method === 'ssa'
+        && r.status.explanation.steps[r.status.explanation.steps.length - 1]?.resultLabel === 'c'
+        && approx(r.status.explanation.steps[r.status.explanation.steps.length - 1].resultValue, r.status.solution.c, 1e-10);
+    })(),
+  },
+  {
+    name: 'Two SSA solutions each carry their own distinct trace',
+    passed: (() => {
+      const r = solveTriangle({ a: 5, b: 7, c: null, alpha: 30, beta: null, gamma: null });
+      if (r.status.kind !== 'multiple') return false;
+      const [first, second] = r.status.explanations;
+      return first !== second
+        && first.method === 'ssa' && second.method === 'ssa'
+        && first.steps !== second.steps
+        && approx(first.steps[first.steps.length - 1].resultValue, r.status.solutions[0].c, 1e-10)
+        && approx(second.steps[second.steps.length - 1].resultValue, r.status.solutions[1].c, 1e-10)
+        && Math.abs(first.steps[1].resultValue - second.steps[1].resultValue) > 1;
+    })(),
+  },
+  {
+    name: 'No-solution SSA and invalid or contradictory inputs have no explanation',
+    passed: (() => {
+      const impossible = solveTriangle({ a: 3, b: 10, c: null, alpha: 30, beta: null, gamma: null });
+      const invalid = solveTriangle({ a: 5, b: 7, c: 1, alpha: null, beta: null, gamma: null });
+      const conflict = solveTriangle({ a: 5, b: 7, c: 8, alpha: 30, beta: null, gamma: null });
+      return impossible.status.kind === 'invalid' && !('explanation' in impossible.status)
+        && invalid.status.kind === 'invalid' && !('explanation' in invalid.status)
+        && conflict.status.kind === 'contradictory' && !('explanation' in conflict.status);
+    })(),
+  },
+];
+
+for (const check of explanationChecks) {
+  if (check.passed) {
+    passed++;
+    console.log(`  ✓ ${check.name}`);
+  } else {
+    failed++;
+    console.log(`  ✗ ${check.name}`);
+  }
+}
+
 console.log(`\n${passed}/${passed + failed} tests passed`);
 if (failed > 0) {
   throw new Error(`${failed} test(s) failed`);

@@ -41,6 +41,7 @@ export const translations = {
 
     // Results
     resultTitle: 'Triangle Result',
+    calculationExplanationTitle: 'How was this calculated?',
     sidesResult: 'Sides',
     anglesResult: 'Angles',
     methodUsed: 'Method used',

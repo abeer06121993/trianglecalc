@@ -23,9 +23,22 @@ export interface TriangleSolution {
   gamma: number;
 }
 
+export interface CalculationStep {
+  formula: string;
+  substitution: string;
+  resultLabel: string;
+  resultValue: number;
+  resultKind: 'length' | 'angle';
+}
+
+export interface CalculationExplanation {
+  method: 'cosine-rule' | 'sine-rule' | 'angle-sum-and-sine-rule' | 'ssa';
+  steps: CalculationStep[];
+}
+
 export type SolutionStatus =
-  | { kind: 'solved'; solution: TriangleSolution }
-  | { kind: 'multiple'; solutions: [TriangleSolution, TriangleSolution] }
+  | { kind: 'solved'; solution: TriangleSolution; explanation: CalculationExplanation }
+  | { kind: 'multiple'; solutions: [TriangleSolution, TriangleSolution]; explanations: [CalculationExplanation, CalculationExplanation] }
   | { kind: 'insufficient'; message: string }
   | { kind: 'contradictory'; message: string }
   | { kind: 'invalid'; message: string };
@@ -120,6 +133,89 @@ function anglesSumValid(a1: number, a2: number, a3: number): boolean {
 
 const ANGLE_CONSISTENCY_TOLERANCE_DEGREES = 0.1;
 
+function sssExplanation(solution: TriangleSolution): CalculationExplanation {
+  const steps: CalculationStep[] = [];
+  for (const [opposite, adjacent1, adjacent2, angleKey] of [
+    ['a', 'b', 'c', 'alpha'], ['b', 'a', 'c', 'beta'], ['c', 'a', 'b', 'gamma'],
+  ] as const) {
+    steps.push({
+      formula: `${angleKey} = cos⁻¹((${adjacent1}² + ${adjacent2}² − ${opposite}²) / (2·${adjacent1}·${adjacent2}))`,
+      substitution: `cos⁻¹((${solution[adjacent1]}² + ${solution[adjacent2]}² − ${solution[opposite]}²) / (2·${solution[adjacent1]}·${solution[adjacent2]}))`,
+      resultLabel: angleKey,
+      resultValue: solution[angleKey],
+      resultKind: 'angle',
+    });
+  }
+  return { method: 'cosine-rule', steps };
+}
+
+function sasExplanation(
+  solution: TriangleSolution,
+  target: 'a' | 'b' | 'c',
+  side1: 'a' | 'b' | 'c',
+  side2: 'a' | 'b' | 'c',
+  included: 'alpha' | 'beta' | 'gamma',
+): CalculationExplanation {
+  const steps: CalculationStep[] = [{
+    formula: `${target} = √(${side1}² + ${side2}² − 2·${side1}·${side2}·cos(${included}))`,
+    substitution: `√(${solution[side1]}² + ${solution[side2]}² − 2·${solution[side1]}·${solution[side2]}·cos(${solution[included]}°))`,
+    resultLabel: target,
+    resultValue: solution[target],
+    resultKind: 'length',
+  }];
+  for (const angleKey of (['alpha', 'beta', 'gamma'] as const).filter((key) => key !== included)) {
+    const opposite = angleKey === 'alpha' ? 'a' : angleKey === 'beta' ? 'b' : 'c';
+    const [adjacent1, adjacent2] = (['a', 'b', 'c'] as const).filter((key) => key !== opposite);
+    steps.push({
+      formula: `${angleKey} = cos⁻¹((${adjacent1}² + ${adjacent2}² − ${opposite}²) / (2·${adjacent1}·${adjacent2}))`,
+      substitution: `cos⁻¹((${solution[adjacent1]}² + ${solution[adjacent2]}² − ${solution[opposite]}²) / (2·${solution[adjacent1]}·${solution[adjacent2]}))`,
+      resultLabel: angleKey,
+      resultValue: solution[angleKey],
+      resultKind: 'angle',
+    });
+  }
+  return { method: 'cosine-rule', steps };
+}
+
+function inputAngleSumValues(input: TriangleInput, solution: TriangleSolution): ['alpha' | 'beta' | 'gamma', number, 'alpha' | 'beta' | 'gamma', number] | null {
+  const entries = (['alpha', 'beta', 'gamma'] as const).filter((key) => input[key] !== null);
+  if (entries.length !== 2) return null;
+  return [entries[0], solution[entries[0]], entries[1], solution[entries[1]]];
+}
+
+function sineRuleExplanation(
+  solution: TriangleSolution,
+  knownSide: 'a' | 'b' | 'c',
+  knownLength: number,
+  knownAngle: number,
+  angleSumInputs: ['alpha' | 'beta' | 'gamma', number, 'alpha' | 'beta' | 'gamma', number] | null,
+): CalculationExplanation {
+  const steps: CalculationStep[] = [];
+  if (angleSumInputs) {
+    const missingKey = (['alpha', 'beta', 'gamma'] as const).find((key) =>
+      key !== angleSumInputs[0] && key !== angleSumInputs[2],
+    )!;
+    steps.push({
+      formula: `${missingKey} = 180° − ${angleSumInputs[0]} − ${angleSumInputs[2]}`,
+      substitution: `180° − ${angleSumInputs[1]}° − ${angleSumInputs[3]}°`,
+      resultLabel: missingKey,
+      resultValue: solution[missingKey],
+      resultKind: 'angle',
+    });
+  }
+  for (const key of ['a', 'b', 'c'] as const) {
+    const angleKey = key === 'a' ? 'alpha' : key === 'b' ? 'beta' : 'gamma';
+    steps.push({
+      formula: `${key} = ${knownSide} · sin(${angleKey}) / sin(${knownSide === 'a' ? 'alpha' : knownSide === 'b' ? 'beta' : 'gamma'})`,
+      substitution: `${knownLength} · sin(${solution[angleKey]}°) / sin(${knownAngle}°)`,
+      resultLabel: key,
+      resultValue: solution[key],
+      resultKind: 'length',
+    });
+  }
+  return { method: 'angle-sum-and-sine-rule', steps };
+}
+
 // --- Main solve function ---
 
 export function solveTriangle(input: TriangleInput): SolveResult {
@@ -190,7 +286,7 @@ export function solveTriangle(input: TriangleInput): SolveResult {
     if (conflict) {
       return contradictoryResult(`The entered ${conflict.name} conflicts with the angle determined by the three side lengths.`);
     }
-    return solvedResult(sideDetermined, 'SSS');
+    return solvedResult(sideDetermined, 'SSS', sssExplanation(sideDetermined));
   }
 
   const sideCount = [a, b, c].filter((s) => s !== null).length;
@@ -220,21 +316,24 @@ export function solveTriangle(input: TriangleInput): SolveResult {
     const cCalc = sideFromCosineRule(a, b, gamma);
     const al = angleFromCosine({ a, b, c: cCalc }, 'a');
     const be = angleFromCosine({ a, b, c: cCalc }, 'b');
-    return solvedResult({ a, b, c: cCalc, alpha: al, beta: be, gamma }, 'SAS');
+    const solution = { a, b, c: cCalc, alpha: al, beta: be, gamma };
+    return solvedResult(solution, 'SAS', sasExplanation(solution, 'c', 'a', 'b', 'gamma'));
   }
   // a, c, β included
   if (a && c && beta && !alpha && !gamma && !b) {
     const bCalc = sideFromCosineRule(a, c, beta);
     const al = angleFromCosine({ a, b: bCalc, c }, 'a');
     const ga = angleFromCosine({ a, b: bCalc, c }, 'c');
-    return solvedResult({ a, b: bCalc, c, alpha: al, beta, gamma: ga }, 'SAS');
+    const solution = { a, b: bCalc, c, alpha: al, beta, gamma: ga };
+    return solvedResult(solution, 'SAS', sasExplanation(solution, 'b', 'a', 'c', 'beta'));
   }
   // b, c, α included
   if (b && c && alpha && !beta && !gamma && !a) {
     const aCalc = sideFromCosineRule(b, c, alpha);
     const be = angleFromCosine({ a: aCalc, b, c }, 'b');
     const ga = angleFromCosine({ a: aCalc, b, c }, 'c');
-    return solvedResult({ a: aCalc, b, c, alpha, beta: be, gamma: ga }, 'SAS');
+    const solution = { a: aCalc, b, c, alpha, beta: be, gamma: ga };
+    return solvedResult(solution, 'SAS', sasExplanation(solution, 'a', 'b', 'c', 'alpha'));
   }
 
   // --- ASA / AAS: One side + two angles ---
@@ -270,7 +369,9 @@ export function solveTriangle(input: TriangleInput): SolveResult {
     const bCalc = sideFromSineRule(knownSide.len, knownAngle, a2);
     const cCalc = sideFromSineRule(knownSide.len, knownAngle, a3);
 
-    return solvedResult({ a: aCalc, b: bCalc, c: cCalc, alpha: a1, beta: a2, gamma: a3 }, 'ASA');
+    const solution = { a: aCalc, b: bCalc, c: cCalc, alpha: a1, beta: a2, gamma: a3 };
+    const angleSumInputs = inputAngleSumValues(input, solution);
+    return solvedResult(solution, 'ASA', sineRuleExplanation(solution, knownSide.side, knownSide.len, knownAngle, angleSumInputs));
   }
 
   // --- SSA: Two sides + non-included angle (ambiguous case) ---
@@ -344,6 +445,40 @@ function solveSSAPair(
   angleKey: 'alpha' | 'beta' | 'gamma',
 ): SolveResult {
   const h = adjacentSide * Math.sin(toRad(knownAngleDeg)); // height
+  const explanationFor = (solution: TriangleSolution, rightCase = false): CalculationExplanation => {
+    const oppositeAngleKey = adjacentKey === 'a' ? 'alpha' : adjacentKey === 'b' ? 'beta' : 'gamma';
+    const remainingSide = (['a', 'b', 'c'] as const).find((key) => key !== oppositeKey && key !== adjacentKey)!;
+    const thirdAngleKey = remainingSide === 'a' ? 'alpha' : remainingSide === 'b' ? 'beta' : 'gamma';
+    const steps: CalculationStep[] = [{
+      formula: 'h = adjacent side · sin(known angle)',
+      substitution: `${adjacentSide} · sin(${knownAngleDeg}°)`,
+      resultLabel: 'h', resultValue: h, resultKind: 'length',
+    }];
+    if (rightCase) {
+      steps.push({ formula: `${oppositeAngleKey} = 90°`, substitution: 'right angle', resultLabel: oppositeAngleKey, resultValue: solution[oppositeAngleKey], resultKind: 'angle' });
+    } else {
+      steps.push({
+        formula: `sin(${oppositeAngleKey}) = adjacent side · sin(known angle) / opposite side`,
+        substitution: `${adjacentSide} · sin(${knownAngleDeg}°) / ${oppositeSide}`,
+        resultLabel: oppositeAngleKey, resultValue: solution[oppositeAngleKey], resultKind: 'angle',
+      });
+    }
+    steps.push({
+      formula: rightCase
+        ? `${thirdAngleKey} = 90° − ${angleKey}`
+        : `${thirdAngleKey} = 180° − ${angleKey} − ${oppositeAngleKey}`,
+      substitution: rightCase
+        ? `90° − ${knownAngleDeg}°`
+        : `180° − ${knownAngleDeg}° − ${solution[oppositeAngleKey]}°`,
+      resultLabel: thirdAngleKey, resultValue: solution[thirdAngleKey], resultKind: 'angle',
+    });
+    steps.push({
+      formula: `${remainingSide} = ${oppositeKey} · sin(${thirdAngleKey}) / sin(${angleKey})`,
+      substitution: `${oppositeSide} · sin(${solution[thirdAngleKey]}°) / sin(${knownAngleDeg}°)`,
+      resultLabel: remainingSide, resultValue: solution[remainingSide], resultKind: 'length',
+    });
+    return { method: 'ssa', steps };
+  };
 
   // If the known angle is >= 90°, only one solution possible
   if (knownAngleDeg >= 90) {
@@ -355,10 +490,8 @@ function solveSSAPair(
     const otherAngle = toDeg(Math.asin(sinOther));
     const thirdAngle = 180 - knownAngleDeg - otherAngle;
     if (thirdAngle <= 0) return invalidResult('These values cannot form a valid triangle.');
-    return solvedResult(
-      buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle, thirdAngle),
-      'SSA',
-    );
+    const solution = buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle, thirdAngle);
+    return solvedResult(solution, 'SSA', explanationFor(solution));
   }
 
   // Acute known angle
@@ -371,10 +504,8 @@ function solveSSAPair(
     // Exactly one solution (right triangle)
     const otherAngle = 90;
     const thirdAngle = 90 - knownAngleDeg;
-    return solvedResult(
-      buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle, thirdAngle),
-      'SSA',
-    );
+    const solution = buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle, thirdAngle);
+    return solvedResult(solution, 'SSA', explanationFor(solution, true));
   }
 
   if (oppositeSide > adjacentSide) {
@@ -383,10 +514,8 @@ function solveSSAPair(
     const otherAngle = toDeg(Math.asin(sinOther));
     const thirdAngle = 180 - knownAngleDeg - otherAngle;
     if (thirdAngle <= 0) return invalidResult('These values cannot form a valid triangle.');
-    return solvedResult(
-      buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle, thirdAngle),
-      'SSA',
-    );
+    const solution = buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle, thirdAngle);
+    return solvedResult(solution, 'SSA', explanationFor(solution));
   }
 
   // h < oppositeSide < adjacentSide → two solutions
@@ -401,10 +530,8 @@ function solveSSAPair(
     // Only one valid
     const validAngle = thirdAngle1 > 0 ? otherAngle1 : otherAngle2;
     const validThird = thirdAngle1 > 0 ? thirdAngle1 : thirdAngle2;
-    return solvedResult(
-      buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, validAngle, validThird),
-      'SSA',
-    );
+    const solution = buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, validAngle, validThird);
+    return solvedResult(solution, 'SSA', explanationFor(solution));
   }
 
   const sol1 = buildSolution(oppositeKey, adjacentKey, angleKey, oppositeSide, adjacentSide, knownAngleDeg, otherAngle1, thirdAngle1);
@@ -415,7 +542,7 @@ function solveSSAPair(
   }
 
   return {
-    status: { kind: 'multiple', solutions: [sol1, sol2] },
+    status: { kind: 'multiple', solutions: [sol1, sol2], explanations: [explanationFor(sol1), explanationFor(sol2)] },
     method: 'SSA',
   };
 }
@@ -467,7 +594,7 @@ function buildSolution(
 
 // --- Result constructors ---
 
-function solvedResult(sol: TriangleSolution, method: SolveMethod): SolveResult {
+function solvedResult(sol: TriangleSolution, method: SolveMethod, explanation: CalculationExplanation): SolveResult {
   // Final validation
   if (!solutionNumericallySafe(sol)) {
     return invalidResult(NUMERIC_RANGE_ERROR);
@@ -478,7 +605,7 @@ function solvedResult(sol: TriangleSolution, method: SolveMethod): SolveResult {
   if (!anglesSumValid(sol.alpha, sol.beta, sol.gamma)) {
     return invalidResult('The calculated angles do not add up to 180°.');
   }
-  return { status: { kind: 'solved', solution: sol }, method };
+  return { status: { kind: 'solved', solution: sol, explanation }, method };
 }
 
 function insufficientResult(message: string): SolveResult {
